@@ -396,6 +396,7 @@ let firmaVista = "";
 let verParticipacion = false;
 let firmaLectura = "";
 let lecturaLocal = false;
+let copiaRespaldo = false;
 let copiaParcial = false;
 let turnoEnHoja = false;
 const STORE = "bolseo-reporte-v2";
@@ -674,7 +675,9 @@ function pintar() {
   const hora = consultado
     ? horaCorta(consultado)
     : "";
-  document.getElementById("corteMeta").textContent = lecturaLocal
+  document.getElementById("corteMeta").textContent = copiaRespaldo
+    ? "Copia guardada, " + hora + ". El seguimiento no reemplazó estos datos."
+    : lecturaLocal
     ? "Copia de este equipo, " + hora + ". Leyendo el seguimiento…"
     : "Actualizado a las " + hora + " · igual en todos los equipos";
   const pie = document.getElementById("pieImpreso");
@@ -771,7 +774,7 @@ function pintar() {
 
   const totalRank = ranking.reduce((s, [, info]) => s + valorDe(info), 0) || 1;
   const maxRank = ranking.length ? valorDe(ranking[0][1]) : 1;
-  const barrasCli = ranking.slice(0, 12).map(([nombre, info]) => {
+  const filaBarra = ([nombre, info]) => {
     const val = valorDe(info);
     const anchoBar = Math.max(2, 100 * val / maxRank);
     const sel = nombre === cliente ? " sel" : "";
@@ -779,7 +782,9 @@ function pintar() {
       + '<span class="bar-name">' + esc(corto(nombre)) + "</span>"
       + '<span class="bar-track"><span class="bar-fill" style="width:' + anchoBar.toFixed(1) + '%;background:' + (color.get(nombre) || OTROS) + '"></span></span>'
       + '<span class="bar-num">' + etiquetaMetrica(val) + " · " + fmt(100 * val / totalRank, 1) + "%</span></button>";
-  }).join("");
+  };
+  const barrasCli = ranking.slice(0, 12).map(filaBarra).join("");
+  const barrasResto = ranking.slice(12).map(filaBarra).join("");
 
   const filasCliente = ranking.map(([nombre, info]) => {
     const val = valorDe(info);
@@ -834,8 +839,11 @@ function pintar() {
   const bloqueQuien = '<section><h2>' + (cliente ? "Producción de " + esc(corto(cliente)) : "Quién produjo más") + " <span>" + (metrica === "kilos" ? "kilos" : "piezas") + "</span></h2>"
     + '<p class="sub no-print">Oprime un nombre para ver solo a ese cliente. Oprime otra vez para volver a todos.</p>'
     + '<article class="card"><div class="bars">' + barrasCli + "</div></article>"
-    + '<button type="button" class="btn-desplegar" data-desplegar="participacion" aria-expanded="' + (verParticipacion ? "true" : "false") + '"><span>Ver detalle de todos los clientes</span>' + (verParticipacion ? "<small>Ocultar</small>" : "") + "</button>"
+    + (barrasResto
+      ? '<button type="button" class="btn-desplegar" data-desplegar="participacion" aria-expanded="' + (verParticipacion ? "true" : "false") + '"><span>' + (verParticipacion ? "Ocultar los demás clientes" : "Ver todos los clientes") + "</span><small>" + (ranking.length - 12) + " más</small></button>"
+      : "")
     + '<div class="desplegable' + (verParticipacion ? " abierto" : "") + '">'
+    + (barrasResto ? '<article class="card"><div class="bars">' + barrasResto + "</div></article>" : "")
     + '<div class="tabla-wrap"><table><thead><tr><th class="l">Cliente</th><th>Días</th><th>Órdenes</th><th>Piezas</th><th>Kilos</th><th>%</th></tr></thead><tbody>'
     + filasCliente
     + '<tr class="total"><td class="l">' + (dias.length < 2 ? "Día" : "Periodo") + '</td><td></td><td>' + fmt(res.ordenes) + "</td><td>" + fmt(res.piezas) + "</td><td>" + fmt(res.kilos, 0) + "</td><td>100%</td></tr>"
@@ -1156,6 +1164,7 @@ function pintarMaquinas() {
     return;
   }
   const max = Math.max(1, ...lista.map(([, info]) => valorDe(info)));
+  // Parte del total: piezas o kilos de la máquina / suma de las máquinas de este calendario y cliente × 100.
   const totalValor = lista.reduce((s, [, info]) => s + valorDe(info), 0) || 1;
   const filas = lista.map(([nombre, info]) => {
     const valor = valorDe(info);
@@ -1500,7 +1509,17 @@ function aplicar(resp, desde) {
   }
 }
 
-function aplicarLista(nuevas) {
+function lecturaMasCorta(nuevas) {
+  return registros.length >= 50 && nuevas.length < Math.floor(registros.length * 0.85);
+}
+
+function aplicarLista(nuevas, origen) {
+  if (lecturaMasCorta(nuevas)) {
+    marcarBoton("Actualizar", false);
+    avisoGuardado("La lectura vino más corta. Se dejó lo guardado.");
+    return;
+  }
+  copiaRespaldo = origen === "respaldo";
   registros = nuevas;
   corte = registros.reduce((max, r) => !max || r.fecha > max ? r.fecha : max, null);
   consultado = new Date();
@@ -1511,7 +1530,9 @@ function aplicarLista(nuevas) {
   marcarBoton("Actualizar", false);
   const hora = horaCorta(consultado);
   if (igual) {
-    document.getElementById("corteMeta").textContent = "Actualizado a las " + hora;
+    document.getElementById("corteMeta").textContent = copiaRespaldo
+      ? "Copia guardada, " + hora + ". El seguimiento no reemplazó estos datos."
+      : "Actualizado a las " + hora;
     return;
   }
   guardar();
@@ -1564,10 +1585,13 @@ function cargar(forzar) {
       cargando = false;
       clearTimeout(window.__sheetTimer);
       const nuevas = filasDeCsv(texto);
-      if (nuevas.length < 50) {
-        marcarBoton("Actualizar", false);
-        if (!registros.length) estado("El seguimiento vino incompleto. Pulsa Actualizar.", true);
-        else avisoGuardado("La lectura vino incompleta.");
+      if (nuevas.length < 50 || lecturaMasCorta(nuevas)) {
+        if (registros.length) {
+          marcarBoton("Actualizar", false);
+          avisoGuardado(nuevas.length < 50 ? "La lectura vino incompleta." : "La lectura vino más corta. Se dejó lo guardado.");
+          return;
+        }
+        cargarRespaldo();
         return;
       }
       aplicarLista(nuevas);
@@ -1576,6 +1600,35 @@ function cargar(forzar) {
       if (id !== reqId) return;
       cargando = false;
       clearTimeout(window.__sheetTimer);
+      if (!registros.length) cargarRespaldo();
+      else {
+        marcarBoton("Actualizar", false);
+        avisoGuardado("No se pudo actualizar.");
+      }
+    });
+}
+
+function cargarRespaldo() {
+  if (window.__respaldo) return;
+  window.__respaldo = true;
+  fetch("respaldo.csv?t=" + Date.now(), { cache: "no-store" })
+    .then(r => {
+      if (!r.ok) throw new Error(String(r.status));
+      return r.text();
+    })
+    .then(texto => {
+      window.__respaldo = false;
+      const nuevas = filasDeCsv(texto);
+      if (nuevas.length < 50 || lecturaMasCorta(nuevas)) {
+        marcarBoton("Actualizar", false);
+        if (!registros.length) estado("No se pudo consultar el seguimiento. Revisa que la hoja siga pública.", true);
+        else avisoGuardado("Se dejó lo guardado.");
+        return;
+      }
+      aplicarLista(nuevas, "respaldo");
+    })
+    .catch(() => {
+      window.__respaldo = false;
       marcarBoton("Actualizar", false);
       if (!registros.length) estado("No se pudo consultar el seguimiento. Revisa que la hoja siga pública.", true);
       else avisoGuardado("No se pudo actualizar.");
