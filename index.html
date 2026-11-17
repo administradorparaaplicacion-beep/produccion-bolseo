@@ -629,6 +629,7 @@ function colores(nombres) {
 }
 
 function pintar() {
+  const yVista = window.scrollY;
   const cuerpo = document.getElementById("cuerpo");
   const acumulado = document.getElementById("acumulado");
   if (!corte) {
@@ -855,6 +856,7 @@ function pintar() {
   sincronizarDia();
   marcarBotonTodos();
   document.querySelectorAll(".chart-scroll").forEach(zona => { zona.scrollLeft = zona.scrollWidth; });
+  window.scrollTo(0, yVista);
 
   function kpi(lbl, num, d, texto) {
     return '<article class="kpi"><div class="lbl">' + esc(lbl) + '</div><div class="num' + (texto ? " texto" : "") + '">' + esc(num) + '</div><div class="hint ' + d.cls + '">' + esc(d.txt) + "</div></article>";
@@ -1689,11 +1691,20 @@ document.getElementById("listaClientes").addEventListener("click", e => {
   elegirCliente(cliente === nombre ? "" : nombre);
 });
 
+function alternarParticipacion(boton) {
+  verParticipacion = !verParticipacion;
+  const caja = boton.parentElement ? boton.parentElement.querySelector(".desplegable") : null;
+  if (caja) caja.classList.toggle("abierto", verParticipacion);
+  boton.setAttribute("aria-expanded", verParticipacion ? "true" : "false");
+  const titulo = boton.querySelector("span");
+  if (titulo) titulo.textContent = verParticipacion ? "Ocultar los demás clientes" : "Ver todos los clientes";
+  if (verParticipacion && caja) caja.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 document.getElementById("quien").addEventListener("click", e => {
   const desplegar = e.target.closest("[data-desplegar]");
   if (desplegar) {
-    verParticipacion = !verParticipacion;
-    pintar();
+    alternarParticipacion(desplegar);
     return;
   }
   const b = e.target.closest("[data-cliente]");
@@ -1724,8 +1735,7 @@ document.getElementById("cuerpo").addEventListener("click", e => {
   }
   const desplegar = e.target.closest("[data-desplegar]");
   if (desplegar) {
-    verParticipacion = !verParticipacion;
-    pintar();
+    alternarParticipacion(desplegar);
     return;
   }
   const b = e.target.closest("[data-cliente]");
