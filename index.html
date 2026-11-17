@@ -122,6 +122,8 @@
   .btn-desplegar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .desplegable { display: none; margin-top: 12px; }
   .desplegable.abierto { display: block; }
+  .bars .desplegable { margin-top: 8px; }
+  .bars .desplegable.abierto { display: flex; flex-direction: column; gap: 8px; }
   .bars { display: flex; flex-direction: column; gap: 8px; }
   .bar-row {
     display: grid; grid-template-columns: 148px 1fr 168px; gap: 8px; align-items: center;
@@ -839,12 +841,13 @@ function pintar() {
   const quien = document.getElementById("quien");
   const bloqueQuien = '<section><h2>' + (cliente ? "Producción de " + esc(corto(cliente)) : "Quién produjo más") + " <span>" + (metrica === "kilos" ? "kilos" : "piezas") + "</span></h2>"
     + '<p class="sub no-print">Oprime un nombre para ver solo a ese cliente. Oprime otra vez para volver a todos.</p>'
-    + '<article class="card"><div class="bars">' + barrasCli + "</div></article>"
+    + '<article class="card"><div class="bars">' + barrasCli
+    + (barrasResto ? '<div class="desplegable' + (verParticipacion ? " abierto" : "") + '">' + barrasResto + "</div>" : "")
+    + "</div></article>"
     + (barrasResto
       ? '<button type="button" class="btn-desplegar" data-desplegar="participacion" aria-expanded="' + (verParticipacion ? "true" : "false") + '"><span>' + (verParticipacion ? "Ocultar los demás clientes" : "Ver todos los clientes") + "</span><small>" + (ranking.length - 12) + " más</small></button>"
       : "")
     + '<div class="desplegable' + (verParticipacion ? " abierto" : "") + '">'
-    + (barrasResto ? '<article class="card"><div class="bars">' + barrasResto + "</div></article>" : "")
     + '<div class="tabla-wrap"><table><thead><tr><th class="l">Cliente</th><th>Días</th><th>Órdenes</th><th>Piezas</th><th>Kilos</th><th>%</th></tr></thead><tbody>'
     + filasCliente
     + '<tr class="total"><td class="l">' + (dias.length < 2 ? "Día" : "Periodo") + '</td><td></td><td>' + fmt(res.ordenes) + "</td><td>" + fmt(res.piezas) + "</td><td>" + fmt(res.kilos, 0) + "</td><td>100%</td></tr>"
@@ -1693,12 +1696,17 @@ document.getElementById("listaClientes").addEventListener("click", e => {
 
 function alternarParticipacion(boton) {
   verParticipacion = !verParticipacion;
-  const caja = boton.parentElement ? boton.parentElement.querySelector(".desplegable") : null;
-  if (caja) caja.classList.toggle("abierto", verParticipacion);
+  const seccion = boton.parentElement;
+  if (seccion) seccion.querySelectorAll(".desplegable").forEach(caja => caja.classList.toggle("abierto", verParticipacion));
   boton.setAttribute("aria-expanded", verParticipacion ? "true" : "false");
   const titulo = boton.querySelector("span");
   if (titulo) titulo.textContent = verParticipacion ? "Ocultar los demás clientes" : "Ver todos los clientes";
-  if (verParticipacion && caja) caja.scrollIntoView({ behavior: "smooth", block: "start" });
+  const lista = seccion && seccion.querySelector(".bars .desplegable");
+  if (verParticipacion && lista) {
+    const sc = document.scrollingElement || document.documentElement;
+    const destino = sc.scrollTop + lista.getBoundingClientRect().top - 12;
+    sc.scrollTo({ top: destino, behavior: "smooth" });
+  }
 }
 
 document.getElementById("quien").addEventListener("click", e => {
